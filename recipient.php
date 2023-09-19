@@ -7,27 +7,27 @@ $connection = new AMQPStreamConnection('localhost', 5672, 'guest', 'guest');
 $channel = $connection->channel();
 
 $channel->queue_declare('file_queue', false, false, false, false);
+$channel->queue_declare('reply_queue', false, false, false, false);
 
 echo "Ожидание сообщения...\n";
 
-$callback = function ($msg) {
-    $fileContent = $msg->body;
-    $filename = 'received_file.txt'; //название файла для сохранения
+$callback = function ($msg) use ($channel) {
+    $filename = 'received_file.txt';
+    file_put_contents($filename, $msg->body);
 
-    file_put_contents($filename, $fileContent);
-
-    $msg->delivery_info['channel']->basic_ack($msg->delivery_info['delivery_tag']);
-
-    echo "Файл успешно записан как $filename\n";
+    $response = new \PhpAmqpLib\Message\AMQPMessage(
+        'Файл успешно обработан',
+        array('correlation_id' => $msg->get('correlation_id'))
+    );
+    $channel->basic_publish($response, '', $msg->get('reply_to'));
+    echo "Файл успешно записан как received_file.txt\n";
 };
 
-$channel->basic_qos(null, 1, null);
-$channel->basic_consume('file_queue', '', false, false, false, false, $callback);
+$channel->basic_consume('file_queue', '', false, true, false, false, $callback);
 
-while ($channel->is_consuming()) {
+while (count($channel->callbacks)) {
     $channel->wait();
 }
 
 $channel->close();
 $connection->close();
-?>
