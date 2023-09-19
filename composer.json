@@ -1,0 +1,15 @@
+{
+  "name": "vendor_name/rabbitmqtest",
+  "description": "description",
+  "minimum-stability": "stable",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "rulez",
+      "email": "email@example.com"
+    }
+  ],
+  "require": {
+    "php-amqplib/php-amqplib": "^3.5"
+  }
+}
