@@ -2,32 +2,44 @@
 require_once __DIR__ . '/vendor/autoload.php';
 
 use PhpAmqpLib\Connection\AMQPStreamConnection;
+use PhpAmqpLib\Message\AMQPMessage;
 
+// Устанавливаем соединение с RabbitMQ
 $connection = new AMQPStreamConnection('localhost', 5672, 'guest', 'guest');
 $channel = $connection->channel();
 
+// Объявляем очереди для отправки и получения сообщений
 $channel->queue_declare('file_queue', false, false, false, false);
+$channel->queue_declare('reply_queue', false, false, false, false);
 
 echo "Ожидание сообщения...\n";
 
-$callback = function ($msg) {
-    $fileContent = $msg->body;
-    $filename = 'received_file.txt'; //название файла для сохранения
+// Callback-функция для обработки полученного сообщения
+$callback = function ($msg) use ($channel) {
+    // Задаем имя файла, куда будем записывать содержимое
+    $filename = 'received_file.txt';
+    // Записываем содержимое сообщения в файл
+    file_put_contents($filename, $msg->body);
 
-    file_put_contents($filename, $fileContent);
+    // Создаем ответное сообщение
+    $response = new AMQPMessage(
+        'Файл успешно обработан',
+        array('correlation_id' => $msg->get('correlation_id'))
+    );
 
-    $msg->delivery_info['channel']->basic_ack($msg->delivery_info['delivery_tag']);
-
-    echo "Файл успешно записан как $filename\n";
+    // Отправляем ответ
+    $channel->basic_publish($response, '', $msg->get('reply_to'));
+    echo "Файл успешно записан как received_file.txt\n";
 };
 
-$channel->basic_qos(null, 1, null);
-$channel->basic_consume('file_queue', '', false, false, false, false, $callback);
+// Подписываемся на очередь для получения сообщений
+$channel->basic_consume('file_queue', '', false, true, false, false, $callback);
 
-while ($channel->is_consuming()) {
+// Ожидаем сообщения и обрабатываем их
+while (count($channel->callbacks)) {
     $channel->wait();
 }
 
+// Закрываем канал и соединение
 $channel->close();
 $connection->close();
-?>
